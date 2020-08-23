@@ -1,0 +1,89 @@
+###################################
+### producti (생산정보)
+###################################
+
+
+
+#작업유형 별 작업시간
+p <- prod %>% group_by(key, laction) %>% 
+  summarise(sum=sum(ljobtime))
+
+p$key <- as.factor(p$key)
+p$laction <- as.factor(p$key)
+
+p2 <- dcast(data=prod, key ~ laction, value.var = "ljobtime", fun.aggregate = sum)
+
+p2 <- merge(p2, pro, key='key')
+write.csv(p2, "S:/measurement_producti.csv")
+
+
+#작업 유형 별 작업시간 plot
+prod %>% ggplot(aes(x=id, y=ljobtime, color=laction)) +
+  geom_point(alpha=0.5) +
+  facet_wrap(~laction) +
+  theme(legend.position = "none")
+
+
+#선종 별 샘플 작업시간 합계
+p2 %>% 
+  group_by(lwireid) %>% 
+  summarise(sum = sum(SampleStarted))
+
+hist(p2$SampleStarted)
+ggplot(p2, aes(x=key, y=SampleStarted, color=color)) +
+  geom_point()
+
+
+
+##key-선종-작업시간-불량률 로 데이터 합치기
+#선종 특성 정보 제거
+p3 <- p2[,c(1:11,15)]
+
+p3 <- melt(p3, id=c("key", "ng_rate"))
+
+p3$index <- 1:nrow(p3)
+
+p3 %>% filter(value > 0) %>% 
+  ggplot(aes(x=value, y=ng_rate, color=variable)) +
+  geom_point() +
+  facet_wrap(~variable)
+
+## 작업유형이 불량률에 영향을 미치는지?
+pp <- p2[,c(1:11,15)]
+pp <- pp[,-1]
+str(pp)
+
+model <- lm(pp$ng_rate ~ ., data=pp)
+summary(model)
+
+#상관계수 확인
+cor(pp, use="pairwise.complete.obs")
+
+#샘플작업시간 높은 순서로 정렬
+p2 <- p2[order(p2$SampleStarted, decreasing=T),]
+
+
+tmp <- prod[,c(33,31)] #호기 데이터 추출
+tmp <- unique(tmp)
+
+#작업시간 + 호기
+p2 <- merge(p2, tmp, by='key')
+
+p2$id <- 1:nrow(p2)
+
+#작업시간.melt + 호기
+p3 <- merge(p3, tmp, by='key')
+
+p2 %>% ggplot(aes(x=SampleStarted, y=ng_rate, color=lcomputername)) +
+  geom_point(alpha=0.5) +
+  facet_wrap(~lcomputername) +
+  theme(legend.position = "none")
+
+
+#호기의 불량률 영향 확인
+model <- glm(p3$value ~ p3$lcomputername)
+summary(model)
+
+#호기의 샘플작업시간 영향 확인
+model <- glm(p2$SampleStarted ~ p2$lcomputername)
+summary(model)
